@@ -1,72 +1,83 @@
 import os
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Главное меню
-MAIN_MENU = ReplyKeyboardMarkup(
-    [
+# ---------- КНОПКИ ----------
+def main_menu():
+    keyboard = [
         ["✍️ Опиши идею", "🎤 Озвучить идею"],
         ["💡 Как это работает"],
         ["💰 Тарифы", "💎 Идеи для тебя"]
-    ],
-    resize_keyboard=True
-)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔥 Добро пожаловать в Idea2Cash\n\n"
-        "Я помогаю превращать идеи в деньги.\n"
-        "Выбери, с чего начнём 👇",
-        reply_markup=MAIN_MENU
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
     )
 
-async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ---------- /start ----------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔥 *Idea2Cash*\n\n"
+        "Я превращаю идеи в деньги.\n"
+        "Опиши идею — я покажу потенциал 💸",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
+    )
+
+# ---------- ОБРАБОТКА КНОПОК ----------
+async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "✍️ Опиши идею":
         await update.message.reply_text(
-            "Опиши свою идею одним сообщением.\n"
-            "Я посмотрю, есть ли в ней денежный потенциал 💸"
+            "Напиши свою идею одним сообщением 👇"
         )
 
     elif text == "🎤 Озвучить идею":
         await update.message.reply_text(
-            "Запиши голосовое сообщение с идеей 🎙\n"
-            "Я расшифрую и разберу её."
+            "Запиши голосовое сообщение с идеей 🎙"
         )
 
     elif text == "💡 Как это работает":
         await update.message.reply_text(
-            "Ты отправляешь идею — я показываю,\n"
-            "есть ли спрос и как на ней заработать."
+            "Ты отправляешь идею — я анализирую её и показываю,\n"
+            "как на ней можно заработать 💡"
         )
 
     elif text == "💰 Тарифы":
         await update.message.reply_text(
-            "🔓 Бесплатно — первичная оценка идеи\n"
-            "💎 Pro — глубокий разбор + план монетизации\n\n"
-            "Подробности скоро 🚀"
+            "🔓 Бесплатно — первичная оценка\n"
+            "💎 Pro — глубокий разбор и план монетизации\n\n"
+            "Скоро 🚀"
         )
 
     elif text == "💎 Идеи для тебя":
         await update.message.reply_text(
-            "Напиши сферу или тему,\n"
-            "и я предложу 2–3 идеи специально для тебя 💡"
+            "Я подберу 2–3 идеи под твою нишу 💎\n"
+            "Глубокий разбор — по запросу"
         )
 
     else:
         await update.message.reply_text(
-            "Пожалуйста, выбери действие через меню 👇",
-            reply_markup=MAIN_MENU
+            "Выбери действие с помощью кнопок ⬇️",
+            reply_markup=main_menu()
         )
 
+# ---------- ЗАПУСК ----------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
 
     app.run_polling()
 
