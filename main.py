@@ -1,112 +1,160 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    KeyboardButton
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    ConversationHandler,
-    filters,
+    filters
 )
 
+# --- GROQ ---
+from groq import Groq
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=GROQ_API_KEY)
+
+# --- TELEGRAM ---
 TOKEN = os.getenv("BOT_TOKEN")
 
-# --- Состояния диалога ---
-LINK, PRICE, COST, SALES = range(4)
 
-# --- Главное меню ---
-MAIN_MENU = ReplyKeyboardMarkup(
-    [
-        ["📉 Почему нет продаж", "🛍 Улучшить карточку"],
-        ["📊 Анализ ниши", "💰 Расчёт прибыли"],
-        ["💡 Идеи товаров"],
-        ["❓ Как это работает", "💼 Тарифы"],
-    ],
-    resize_keyboard=True
-)
+# ---------- AI ФУНКЦИЯ ----------
+def ai_answer(user_text: str) -> str:
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": user_text
+                }
+            ],
+            model="llama3-70b-8192"
+        )
 
-# --- /start ---
+        return chat_completion.choices[0].message.content
+
+    except Exception as e:
+        return f"Ошибка AI: {e}"
+
+
+# ---------- МЕНЮ ----------
+def get_main_menu():
+    keyboard = [
+        [
+            KeyboardButton("Опиши идею"),
+            KeyboardButton("Озвучить идею")
+        ],
+        [
+            KeyboardButton("Как это работает"),
+            KeyboardButton("Тарифы")
+        ],
+        [
+            KeyboardButton("Мои идеи")
+        ]
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
+
+
+# ---------- /start ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🚀 MarketBot запущен.\nВыбери функцию 👇",
-        reply_markup=MAIN_MENU
+    text = (
+        "🚀 Добро пожаловать в MarketBoost\n\n"
+        "Я помогу проанализировать товар, нишу и идеи "
+        "для заработка на маркетплейсах.\n\n"
+        "Выберите действие в меню 👇"
     )
 
-# --- Запуск анализа ---
-async def no_sales_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Пришли ссылку на товар:")
-    return LINK
-
-async def get_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["link"] = update.message.text
-    await update.message.reply_text("Укажи цену товара ($):")
-    return PRICE
-
-async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["price"] = update.message.text
-    await update.message.reply_text("Себестоимость ($):")
-    return COST
-
-async def get_cost(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["cost"] = update.message.text
-    await update.message.reply_text("Сколько продаж в месяц?")
-    return SALES
-
-async def get_sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["sales"] = update.message.text
-
     await update.message.reply_text(
-        "🔎 Анализ завершён.\n\n"
-        "Я нашёл несколько возможных проблем:\n"
-        "• Слабое SEO\n"
-        "• Цена выше рынка\n"
-        "• Низкий CTR карточки\n\n"
-        "Хочешь полный разбор с решениями?",
-        reply_markup=MAIN_MENU
+        text,
+        reply_markup=get_main_menu()
     )
 
-    return ConversationHandler.END
 
-# --- Обработчик меню ---
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+# ---------- ОБРАБОТКА КНОПОК ----------
+async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
 
-    if text == "📉 Почему нет продаж":
-        return await no_sales_start(update, context)
+    # --- ОПИСИ ИДЕЮ ---
+    if user_text == "Опиши идею":
+        await update.message.reply_text(
+            "Опиши товар или идею текстом.\n\n"
+            "Я сделаю краткий анализ ниши, спроса и рисков."
+        )
+        return
 
-    responses = {
-        "🛍 Улучшить карточку": "Скоро здесь будет AI-оптимизация карточек.",
-        "📊 Анализ ниши": "Скоро добавим анализ ниши.",
-        "💰 Расчёт прибыли": "Скоро добавим юнит-экономику.",
-        "💡 Идеи товаров": "Скоро добавим подбор товаров.",
-        "❓ Как это работает": "Ты выбираешь функцию — бот анализирует.",
-        "💼 Тарифы": "Тарифы скоро появятся."
-    }
+    # --- ОЗВУЧИТЬ ИДЕЮ ---
+    if user_text == "Озвучить идею":
+        await update.message.reply_text(
+            "Отправь голосовое или текст.\n"
+            "Я преобразую в бизнес-идею и анализ."
+        )
+        return
 
-    reply = responses.get(text, "Выбери кнопку 👇")
-    await update.message.reply_text(reply)
+    # --- КАК ЭТО РАБОТАЕТ ---
+    if user_text == "Как это работает":
+        text = (
+            "📊 Как работает сервис:\n\n"
+            "1️⃣ Ты отправляешь товар / идею\n"
+            "2️⃣ AI анализирует нишу\n"
+            "3️⃣ Даёт спрос, конкуренцию и риски\n"
+            "4️⃣ Предлагает улучшения\n\n"
+            "Подходит для Wildberries, Ozon, Amazon."
+        )
 
-# --- Сборка ---
+        await update.message.reply_text(text)
+        return
+
+    # --- ТАРИФЫ ---
+    if user_text == "Тарифы":
+        text = (
+            "💰 Тарифы:\n\n"
+            "Lite — 1 анализ\n"
+            "Pro — 10 анализов\n"
+            "Ultra — безлимит\n\n"
+            "Оплата подключается позже."
+        )
+
+        await update.message.reply_text(text)
+        return
+
+    # --- МОИ ИДЕИ (AI генерит 3 идеи) ---
+    if user_text == "Мои идеи":
+        prompt = (
+            "Предложи 3 простые идеи товара для продажи "
+            "на маркетплейсах с кратким описанием спроса."
+        )
+
+        answer = ai_answer(prompt)
+
+        await update.message.reply_text(answer)
+        return
+
+    # ---------- ЕСЛИ ПРИСЛАЛ ТЕКСТ ВНЕ КНОПОК ----------
+    answer = ai_answer(user_text)
+
+    await update.message.reply_text(answer)
+
+
+# ---------- MAIN ----------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & filters.Regex("📉 Почему нет продаж"), no_sales_start)],
-        states={
-            LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_link)],
-            PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)],
-            COST: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_cost)],
-            SALES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_sales)],
-        },
-        fallbacks=[],
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons)
     )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv_handler)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
-
+    print("Bot started...")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
-
