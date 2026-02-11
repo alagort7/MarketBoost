@@ -15,8 +15,10 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- ХРАНИЛИЩЕ ЗАПРОСОВ ---
+# --- ЛИМИТЫ ---
+FREE_LIMIT = 3
 user_requests = {}
+user_counts = {}
 
 # --- МЕНЮ ---
 menu = ReplyKeyboardMarkup(
@@ -33,35 +35,63 @@ menu = ReplyKeyboardMarkup(
 # --- START ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 MarketBoost запущен!\n\nВыбери функцию 👇",
+        "🚀 MarketBoost запущен!\n\n"
+        "🎁 Тебе доступно 3 бесплатных анализа\n\n"
+        "Выбери функцию 👇",
         reply_markup=menu
     )
 
-# --- ПОКАЗАТЬ ЗАПРОСЫ ---
+# --- ПОКАЗ ЗАПРОСОВ ---
 async def show_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
 
-    if user_id not in user_requests or len(user_requests[user_id]) == 0:
-        await update.message.reply_text("У тебя пока нет сохранённых запросов.")
+    if user_id not in user_requests:
+        await update.message.reply_text("Запросов пока нет.")
         return
 
-    text = "📂 Твои последние запросы:\n\n"
+    text = "📂 Твои запросы:\n\n"
 
     for i, req in enumerate(user_requests[user_id][-5:], 1):
         text += f"{i}. {req}\n"
 
     await update.message.reply_text(text)
 
-# --- AI ОТВЕТ ---
+# --- ПРОВЕРКА ЛИМИТА ---
+def check_limit(user_id):
+
+    if user_id not in user_counts:
+        user_counts[user_id] = 0
+
+    if user_counts[user_id] >= FREE_LIMIT:
+        return False
+
+    user_counts[user_id] += 1
+    return True
+
+# --- AI ---
 async def ai_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     user_id = update.message.from_user.id
-    user_text = update.message.text
+    text = update.message.text
+
+    # Кнопка истории
+    if text == "📂 Мои запросы":
+        await show_requests(update, context)
+        return
+
+    # Проверка лимита
+    if not check_limit(user_id):
+        await update.message.reply_text(
+            "❌ Лимит бесплатных анализов исчерпан.\n\n"
+            "Чтобы продолжить пользоваться ботом — оформи тариф 💼"
+        )
+        return
 
     # Сохраняем запрос
     if user_id not in user_requests:
         user_requests[user_id] = []
 
-    user_requests[user_id].append(user_text)
+    user_requests[user_id].append(text)
 
     await update.message.reply_text("⏳ Анализирую...")
 
@@ -71,11 +101,11 @@ async def ai_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             messages=[
                 {
                     "role": "system",
-                    "content": "Ты эксперт по маркетплейсам Wildberries и Ozon. Даёшь практические советы продавцам."
+                    "content": "Ты эксперт по маркетплейсам Wildberries и Ozon."
                 },
                 {
                     "role": "user",
-                    "content": user_text
+                    "content": text
                 }
             ],
             temperature=0.7,
@@ -89,21 +119,12 @@ async def ai_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка AI:\n{e}")
 
-# --- ОБРАБОТКА КНОПОК ---
-async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-
-    if text == "📂 Мои запросы":
-        await show_requests(update, context)
-    else:
-        await ai_answer(update, context)
-
 # --- MAIN ---
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_answer))
 
     print("Bot started...")
     app.run_polling()
